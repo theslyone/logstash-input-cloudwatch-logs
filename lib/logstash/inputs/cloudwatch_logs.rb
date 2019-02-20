@@ -50,6 +50,8 @@ class LogStash::Inputs::CloudWatch_Logs < LogStash::Inputs::Base
   # seconds before now to read back from.
   config :start_position, :default => 'beginning'
 
+  config :filter_pattern, :validate => :string, :default => ''
+
 
   # def register
   public
@@ -90,7 +92,7 @@ class LogStash::Inputs::CloudWatch_Logs < LogStash::Inputs::Base
 
       @sincedb_path = File.join(sincedb_dir, ".sincedb_" + Digest::MD5.hexdigest(@log_group.join(",")))
 
-      @logger.info("No sincedb_path set, generating one based on the log_group setting",
+      @logger.debug("No sincedb_path set, generating one based on the log_group setting",
                    :sincedb_path => @sincedb_path, :log_group => @log_group)
     end
 
@@ -117,7 +119,7 @@ class LogStash::Inputs::CloudWatch_Logs < LogStash::Inputs::Base
     while !stop?
       begin
         groups = find_log_groups
-
+        # @logger.debug(groups.to_str)
         groups.each do |group|
           @logger.debug("calling process_group on #{group}")
           process_group(group)
@@ -181,25 +183,27 @@ class LogStash::Inputs::CloudWatch_Logs < LogStash::Inputs::Base
     next_token = nil
     loop do
       if !@sincedb.member?(group)
-        @sincedb[group] = 0
+        @sincedb[group] = DateTime.now.strftime('%Q')
       end
+
       params = {
           :log_group_name => group,
+          :filter_pattern => @filter_pattern,
           :start_time => @sincedb[group],
           :interleaved => true,
           :next_token => next_token
       }
+      @logger.debug("Searching for #{@filter_pattern} in #{group}")
       resp = @cloudwatch.filter_log_events(params)
 
       resp.events.each do |event|
         process_log(event, group)
       end
 
-      _sincedb_write
-
       next_token = resp.next_token
       break if next_token.nil?
     end
+    _sincedb_write      
     @priority.delete(group)
     @priority << group
   end #def process_group
