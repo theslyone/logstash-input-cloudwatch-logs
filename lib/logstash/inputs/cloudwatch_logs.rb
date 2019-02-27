@@ -214,6 +214,7 @@ class LogStash::Inputs::CloudWatch_Logs < LogStash::Inputs::Base
 
     @codec.decode(log.message.to_str) do |event|
       event.set("@timestamp", parse_time(log.timestamp))
+      event.set("[project_prefix]", group)
       event.set("[cloudwatch_logs][ingestion_time]", parse_time(log.ingestion_time))
       event.set("[cloudwatch_logs][log_group]", group)
       event.set("[cloudwatch_logs][log_stream]", log.log_stream_name)
